@@ -152,6 +152,7 @@ def _build_inputs(wb: Workbook, dados: dict) -> dict:
     refs["desc"] = r; _input(r, "Descrição do produto", _vals("descricao"), "@", "livre", soma=False); r += 1
     refs["ncm"]  = r; _input(r, "NCM", _vals("ncm"), "@", "ex.: 8443.32.99", soma=False); r += 1
     refs["qt"]   = r; _input(r, "Quantidade", _vals("qtd"), "#,##0", "soma das qtds."); r += 1
+    refs["vu"]   = r; _input(r, "Valor unitário (R$)", _vals("vunit"), '#,##0.0000', "preço unitário do espelho", soma=False); r += 1
 
     _secao(r, "— VALORES POR ITEM (R$) —"); r += 1
     refs["cif"]  = r; _input(r, "CIF / VMLD do item (R$)", _vals("cif"), NUM, "inclui frete e seguro int. já rateados"); r += 1
@@ -262,13 +263,15 @@ def _build_calculo(wb: Workbook, refs_inputs: dict) -> dict:
     _linha(r, "Numerador = CIF + II + IPI + PIS + COFINS + Outras desp.",
            f"={{col}}{r_cif}+{{col}}{r_ii}+{{col}}{r_ipi}+{{col}}{r_pis}+{{col}}{r_cof}+{{col}}{r_outd}", NUM); r_num = r; r += 1
     _replica(r, "Alíquota interna cheia (UF)", R["ach"], PCT2); r_ach = r; r += 1
+    _linha(r, "Divisor do ICMS (1 − alíq. cheia)",
+           f"=1-{{col}}{r_ach}", PCT2, "ex.: MG 18% → 82%", soma=False); r_div = r; r += 1
     _replica(r, "Carga efetiva do ICMS", R["car"], PCT2, "se < cheia, há redução de base"); r_car = r; r += 1
     _linha(r, "Fator de redução de base equivalente (1 − carga/cheia)",
            f"=IFERROR(1-{{col}}{r_car}/{{col}}{r_ach},0)", PCT4, "0% se sem redução", soma=False); r += 1
     _linha(r, "Fator de base reduzida restante (carga/cheia)",
            f"=IFERROR({{col}}{r_car}/{{col}}{r_ach},0)", PCT4, "100% se sem redução", soma=False); r += 1
     _linha(r, "BASE DO ICMS = Numerador ÷ (1 − alíq. cheia)",
-           f"=IFERROR(ROUND({{col}}{r_num}/(1-{{col}}{r_ach}),2),0)", NUM, "base 'cheia' antes da redução"); r_bas = r; r += 1
+           f"=IFERROR(ROUND({{col}}{r_num}/{{col}}{r_div},2),0)", NUM, "base 'cheia' antes da redução"); r_bas = r; r += 1
     _linha(r, "ICMS DESTACADO (R$) = Base × carga efetiva",
            f"=ROUND({{col}}{r_bas}*{{col}}{r_car},2)", NUM, "destacado na NF e a recolher", destaque=True); r_icm = r; r += 1
     _linha(r, "ICMS 'valor devido' Portal = Base × alíq. cheia",
@@ -376,7 +379,9 @@ def _build_formulas(wb: Workbook, refs_inputs: dict) -> None:
     ws.cell(row=r, column=2, value="Fórmula:").font = BOLD
     ws.merge_cells(f"C{r}:H{r}")
     f1 = (f'="( O:VAL_MERCADORIA - O:DESCONTO + O:DESPESAS + O:FRETE + O:SEGURO + VAL:"'
-          f'&{ref_cod["ii"]}&" + VAL:"&{ref_cod["ipi"]}&" ) / ( 1 - A:"&{ref_cod["icms"]}&" )"')
+          f'&{ref_cod["ii"]}&" + VAL:"&{ref_cod["ipi"]}'
+          f'&" + VAL:"&{ref_cod["pis"]}&" + VAL:"&{ref_cod["cof"]}'
+          f'&" ) / ( 1 - A:"&{ref_cod["icms"]}&" )"')
     c = ws.cell(row=r, column=3, value=f1); c.font, c.fill, c.border, c.alignment = MONO, CODEF, BORD, LEFT
     ws.row_dimensions[r].height = 28
     r += 2
@@ -399,18 +404,24 @@ def _build_formulas(wb: Workbook, refs_inputs: dict) -> None:
     c.font, c.number_format, c.border = BLK, "0.0000", BORD
     ws.cell(row=r, column=4, value="ex.: 8,8% ÷ 18% = 0,4889 (base reduzida para 48,89%)").font = Font(name=ARIAL, size=9, italic=True, color="595959")
     ws.merge_cells(f"D{r}:H{r}")
+    r_fator = r  # guarda a referência da célula com o fator
     r += 1
     ws.cell(row=r, column=2, value="Fórmula:").font = BOLD
     ws.merge_cells(f"C{r}:H{r}")
+    # Construímos o fator como string com vírgula sem depender de locale:
+    # "INT(valor) & "," & TEXT(MOD(ROUND(valor*10000,0),10000),"0000")"
+    # Para 0,4889 → "0" & "," & "4889" = "0,4889"
+    # Para 1,0000 → "1" & "," & "0000" = "1,0000"
     f2 = (f'="( ( O:VAL_MERCADORIA - O:DESCONTO + O:DESPESAS + O:FRETE + O:SEGURO + VAL:"'
-          f'&{ref_cod["ii"]}&" ) / ( 1 - A:"&{ref_cod["icms"]}&" ) ) * "'
-          f'&TEXT(IFERROR(ROUND(\'1. Inputs\'!C{refs_inputs["car"]}/\'1. Inputs\'!C{refs_inputs["ach"]},4),0.4889),"0,0000")')
+          f'&{ref_cod["ii"]}&" + VAL:"&{ref_cod["pis"]}&" + VAL:"&{ref_cod["cof"]}'
+          f'&" ) / ( 1 - A:"&{ref_cod["icms"]}&" ) ) * "'
+          f'&INT(C{r_fator})&","&TEXT(MOD(ROUND(C{r_fator}*10000,0),10000),"0000")')
     c = ws.cell(row=r, column=3, value=f2); c.font, c.fill, c.border, c.alignment = MONO, CODEF, BORD, LEFT
     ws.row_dimensions[r].height = 30
     r += 1
 
     ws.merge_cells(f"B{r}:H{r}")
-    ws.cell(row=r, column=2, value="Obs.: o fator usa o Item 1 como base. Para reduções distintas no mesmo processo, replique a regra mudando apenas o multiplicador final.").font = Font(name=ARIAL, size=9, italic=True, color="C00000")
+    ws.cell(row=r, column=2, value="Obs.: o fator usa o Item 1 como base. Para reduções distintas no mesmo processo, replique a regra mudando apenas o multiplicador final. No M2, o IPI não entra no numerador (itens com redução geralmente têm IPI 0%); se o seu caso tiver IPI tributado com redução de base, acrescente \" + VAL:\"&{cod} antes do \") /\" para somar o IPI.").font = Font(name=ARIAL, size=9, italic=True, color="C00000")
 
     ws.column_dimensions["A"].width = 2
     ws.column_dimensions["B"].width = 40
