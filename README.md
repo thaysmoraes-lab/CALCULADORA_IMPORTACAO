@@ -3,6 +3,20 @@
 App Streamlit que recebe o **PDF do espelho da NF de importação** (TOTVS Protheus) e gera uma planilha Excel completa com a memória de cálculo, as fórmulas prontas para o Configurador de Tributos (FISA170) e a conferência contra os totais do espelho.
 
 
+
+## 🆕 Versão 1.4
+
+- **Correção crítica**: as fórmulas M1 e M2 geradas na aba "3. Fórmulas Protheus" agora incluem `VAL:EPIS01` e `VAL:ECOF01` no numerador (PIS e COFINS-importação) — antes esses dois tributos estavam faltando, gerando base incorreta no Configurador.
+- **Robustez**: substituído `TEXT(...,"0,0000")` por uma construção matemática que não depende do locale do Excel, garantindo que o fator de redução saia sempre com vírgula como separador decimal (ex.: `0,4889`).
+
+## 🆕 Versão 1.3
+
+- Adicionada linha **"Divisor do ICMS (1 − alíq. cheia)"** na aba "2. Cálculo" — mostra explicitamente o `82%` (ou outro valor conforme a UF), tornando a fórmula da BASE auto-documentada (`Numerador ÷ Divisor`).
+
+## 🆕 Versão 1.2
+
+- Adicionada linha **"Valor unitário (R$)"** na aba "1. Inputs" (entre Quantidade e CIF), preenchida com o vUnit extraído do espelho. Útil para rastrear o preço unitário do produto sem precisar fazer a divisão manual.
+
 ## 🆕 Versão 1.1 — correções importantes
 
 - **Parser**: corrigido o caso de quantidade + valor unitário colados no PDF (quando vUnit começa com ponto de milhar, ex.: `5.635,560`).
