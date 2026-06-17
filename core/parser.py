@@ -163,11 +163,22 @@ def _parse_item_line(ln: str) -> dict | None:
     # Tudo depois do CFOP+item: valores numéricos
     resto = ln[m.end():].strip()
 
-    # No espelho do Protheus para importação, a coluna ICMS ST não aparece (são 20 nums).
-    # Caso especial: tx_sisc e aliq_icms vêm coladas ("122,5118,00"). Separamos
-    # com regex, identificando a alíquota ICMS por ser um valor padrão (18,00/12,00/8,80/7,00...).
-    aliq_padrao = r"(?:18,00|17,00|12,00|7,00|8,80|4,00|0,00)"
-    resto = re.sub(rf"(\d+,\d{{2}})({aliq_padrao})(?=\s|$)", r"\1 \2", resto)
+    # ── Correção 1: qtd e vUnit podem vir colados quando o vUnit começa
+    # com ponto de milhar (ex.: "11,000005.635,560" = qtd 11,00000 + vUnit 5.635,560).
+    # A quantidade no espelho do Protheus sempre tem 5 casas decimais,
+    # então identificamos o padrão ",ddddd<dígito>" e inserimos espaço.
+    resto = re.sub(r"(,\d{5})(\d)", r"\1 \2", resto)
+
+    # ── Correção 2: As últimas colunas do espelho (Tx Sisc + Alíq ICMS + Alíq IPI +
+    # Alíq COFINS + Alíq PIS + Alíq II) podem vir várias colunas coladas
+    # (ex.: "135,1818,0015,00" → Tx Sisc 135,18 + Alíq ICMS 18,00 + Alíq IPI 15,00).
+    # Aplicamos a separação repetidamente até estabilizar: qualquer ",dd" seguido
+    # imediatamente por "<1-2 dígitos>,dd" recebe um espaço de separação.
+    while True:
+        novo = re.sub(r"(,\d{2})(\d{1,2},\d{2})", r"\1 \2", resto)
+        if novo == resto:
+            break
+        resto = novo
 
     # Agora extraímos todos os números
     nums = re.findall(_NUM, resto)
@@ -350,6 +361,25 @@ def parse_pdf(pdf_path_or_bytes) -> dict:
 
     cabecalho = _parse_cabecalho(text)
     totais = _parse_totais(text)
+
+    # ── Rateio do AFRMM por item proporcional ao CIF (modal marítimo)
+    # O espelho mostra AFRMM apenas no total; precisamos distribuir nos itens
+    # para que entre corretamente na base do ICMS de cada um.
+    # No espelho do Protheus, o AFRMM rateado JÁ está embutido em "Desp Ac"
+    # do item — por isso, para o vNF não ser duplicado, subtraímos AFRMM
+    # do Desp Ac quando compomos "outras_sem_icms".
+    afrmm_total = totais.get("afrmm", 0.0)
+    cif_total = sum(it["cif"] for it in itens) or 1.0
+    for it in itens:
+        if afrmm_total > 0:
+            it["afrmm_item"] = round(afrmm_total * it["cif"] / cif_total, 2)
+        else:
+            it["afrmm_item"] = 0.0
+        # Outras despesas integrantes da base do ICMS (Siscomex + AFRMM rateado)
+        it["outras_base_icms"] = round(it["tx_sisc"] + it["afrmm_item"], 2)
+        # Outras despesas SEM influência no ICMS (Desp Ac líquido de AFRMM,
+        # já que AFRMM está embutido no Desp Ac do espelho do Protheus)
+        it["outras_sem_icms"] = round(max(0.0, it["desp_ac"] - it["afrmm_item"]), 2)
 
     return {
         "cabecalho": cabecalho,

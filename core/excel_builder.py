@@ -155,10 +155,10 @@ def _build_inputs(wb: Workbook, dados: dict) -> dict:
 
     _secao(r, "— VALORES POR ITEM (R$) —"); r += 1
     refs["cif"]  = r; _input(r, "CIF / VMLD do item (R$)", _vals("cif"), NUM, "inclui frete e seguro int. já rateados"); r += 1
-    # Despesas que ENTRAM na base do ICMS: por padrão, somente Siscomex rateado
-    refs["outd"] = r; _input(r, "Outras despesas integrantes da base ICMS (R$)", _vals("tx_sisc"), NUM, "Siscomex + AFRMM + demais rateadas"); r += 1
-    # Despesas que NÃO entram na base do ICMS: por padrão, "Desp Ac" do espelho
-    refs["outv"] = r; _input(r, "Outras despesas SEM influência no ICMS (R$)", _vals("desp_ac"), NUM, "só p/ compor vNF"); r += 1
+    # Despesas que ENTRAM na base do ICMS: Siscomex + AFRMM (rateado) por item
+    refs["outd"] = r; _input(r, "Outras despesas integrantes da base ICMS (R$)", _vals("outras_base_icms"), NUM, "Siscomex + AFRMM rateados"); r += 1
+    # Despesas que NÃO entram na base: Desp Ac líquido de AFRMM (que já está embutido nele)
+    refs["outv"] = r; _input(r, "Outras despesas SEM influência no ICMS (R$)", _vals("outras_sem_icms"), NUM, "Desp Ac do espelho líquido de AFRMM"); r += 1
 
     _secao(r, "— ALÍQUOTAS POR ITEM —"); r += 1
     refs["aii"]  = r; _input(r, "Alíquota II (%)", _vals("aliq_ii"), PCT2, "0% se Ex-tarifário", soma=False); r += 1
@@ -442,12 +442,16 @@ def _build_conferencia(wb: Workbook, refs_calc: dict, totais_espelho: dict) -> N
         ("IPI total",                              f"='2. Cálculo'!{TOT_COL}{refs_calc['ipi']}",  totais_espelho.get("vipi")),
         ("PIS-importação total",                   f"='2. Cálculo'!{TOT_COL}{refs_calc['pis']}",  totais_espelho.get("vpis")),
         ("COFINS-importação total",                f"='2. Cálculo'!{TOT_COL}{refs_calc['cof']}",  totais_espelho.get("vcofins")),
-        ("Outras despesas na base ICMS",           f"='2. Cálculo'!{TOT_COL}{refs_calc['outd']}", totais_espelho.get("sisc_total")),
+        ("Outras desp. na base ICMS (Siscomex + AFRMM)",
+                                                   f"='2. Cálculo'!{TOT_COL}{refs_calc['outd']}",
+                                                   round(totais_espelho.get("sisc_total", 0) + totais_espelho.get("afrmm", 0), 2) or None),
         ("Base de cálculo do ICMS",                f"='2. Cálculo'!{TOT_COL}{refs_calc['bas']}",  totais_espelho.get("bc_icms")),
         ("ICMS destacado (a recolher)",            f"='2. Cálculo'!{TOT_COL}{refs_calc['icm']}",  totais_espelho.get("vicms")),
         ("ICMS 'valor devido' (Portal)",           f"='2. Cálculo'!{TOT_COL}{refs_calc['dev']}",  None),
-        ("Outras desp. s/ influência no ICMS",     f"='2. Cálculo'!{TOT_COL}{refs_calc['outv']}",
-            (totais_espelho.get("outras_despesas", 0) - totais_espelho.get("sisc_total", 0)) if totais_espelho.get("outras_despesas") else None),
+        ("Outras desp. s/ influência no ICMS (Desp Ac − AFRMM)",
+                                                   f"='2. Cálculo'!{TOT_COL}{refs_calc['outv']}",
+            (round(totais_espelho.get("outras_despesas", 0) - totais_espelho.get("sisc_total", 0) - totais_espelho.get("afrmm", 0), 2)
+             if totais_espelho.get("outras_despesas") else None)),
         ("vNF",                                    f"='2. Cálculo'!{TOT_COL}{refs_calc['vnf']}",  totais_espelho.get("vnf")),
     ]
     for i, (lab, calc, esp) in enumerate(linhas):
