@@ -1,0 +1,14 @@
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+env/
+.env
+.idea/
+.vscode/
+*.xlsx
+*.pdf
+!exemplos/*.pdf
+.DS_Store
+Thumbs.db
