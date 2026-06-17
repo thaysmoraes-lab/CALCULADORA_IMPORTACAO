@@ -2,6 +2,14 @@
 
 App Streamlit que recebe o **PDF do espelho da NF de importação** (TOTVS Protheus) e gera uma planilha Excel completa com a memória de cálculo, as fórmulas prontas para o Configurador de Tributos (FISA170) e a conferência contra os totais do espelho.
 
+
+## 🆕 Versão 1.1 — correções importantes
+
+- **Parser**: corrigido o caso de quantidade + valor unitário colados no PDF (quando vUnit começa com ponto de milhar, ex.: `5.635,560`).
+- **Parser**: corrigido o caso de três alíquotas coladas (Tx Sisc + Alíq ICMS + Alíq IPI) — antes só lidava com duas, perdendo itens com IPI tributado.
+- **Cálculo**: AFRMM agora é rateado automaticamente por item proporcional ao CIF (modal marítimo). Vai para a base do ICMS e é descontado do "Desp Ac" do vNF para evitar dupla contagem.
+- **Conferência**: rótulos das linhas atualizados para refletir o novo modelo (Sisc + AFRMM na base / Desp Ac − AFRMM fora).
+
 ## ✨ O que ele faz
 
 1. **Extrai automaticamente** do PDF: cabeçalho do processo, DUIMP, taxa de câmbio, fornecedor, itens (descrição, NCM, quantidade, CIF, II, IPI, PIS, COFINS, Siscomex, despesas e todas as alíquotas) e os totais.

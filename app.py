@@ -152,6 +152,7 @@ df_itens = pd.DataFrame(
             "Qtd": it["qtd"],
             "CIF (R$)": it["cif"],
             "Siscomex (R$)": it["tx_sisc"],
+            "AFRMM (R$)": it.get("afrmm_item", 0.0),
             "Desp Ac (R$)": it["desp_ac"],
             "Alíq II": it["aliq_ii"],
             "Alíq IPI": it["aliq_ipi"],
@@ -173,6 +174,7 @@ edited = st.data_editor(
         "Qtd": st.column_config.NumberColumn(format="%.0f", width="small"),
         "CIF (R$)": st.column_config.NumberColumn(format="%.2f"),
         "Siscomex (R$)": st.column_config.NumberColumn(format="%.2f"),
+        "AFRMM (R$)": st.column_config.NumberColumn(format="%.2f", help="Rateado proporcional ao CIF (só modal marítimo)"),
         "Desp Ac (R$)": st.column_config.NumberColumn(format="%.2f"),
         "Alíq II":     st.column_config.NumberColumn(format="%.4f", help="0.20 = 20%"),
         "Alíq IPI":    st.column_config.NumberColumn(format="%.4f"),
@@ -198,6 +200,7 @@ for idx, row in edited.iterrows():
         it["qtd"]         = float(row["Qtd"])
         it["cif"]         = float(row["CIF (R$)"])
         it["tx_sisc"]     = float(row["Siscomex (R$)"])
+        it["afrmm_item"]  = float(row["AFRMM (R$)"])
         it["desp_ac"]     = float(row["Desp Ac (R$)"])
         it["aliq_ii"]     = float(row["Alíq II"])
         it["aliq_ipi"]    = float(row["Alíq IPI"])
@@ -205,6 +208,8 @@ for idx, row in edited.iterrows():
         it["aliq_cofins"] = float(row["Alíq COFINS"])
         it["aliq_icms"]   = float(row["Carga ICMS"])
         it["aliq_icms_cheia"] = float(row["ICMS cheia"])
+        # Recalcula o consolidado que entra na base do ICMS
+        it["outras_base_icms"] = round(it["tx_sisc"] + it["afrmm_item"], 2)
 
 
 # ============================================================
